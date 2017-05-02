@@ -18,38 +18,14 @@ object Converter {
     def to(value: HNil) = HNil
   }
 
-  /* first attempt: doesn't work because compiler doesn't find that TailConverted is an HList:
-   * type arguments [HeadConverted,TailConverted] do not conform to class ::'s type parameter bounds [+H,+T <: shapeless.HList]
-   * [error]       type To = HeadConverted :: TailConverted
-   */
-  // implicit def forHList[Head, HeadConverted, Tail <: HList, TailConverted](
-  //   implicit
-  //   hConverter: Converter.Aux[Head, HeadConverted],
-  //   tConverter: Converter.Aux[Tail, TailConverted]): Converter[Head :: Tail] =
-  //   new Converter[Head :: Tail] {
-  //     type To = HeadConverted :: TailConverted
-  //     def to(values: Head :: Tail) = ???
-  //   }
-
-  /* second attempt: compiles, and finds `the[Converter[Integer :: HNil]]`, but doesn't find `the[Converter.Aux[Integer :: HNil, String :: HNil]]`
-   */
-  implicit def forHList[Head, HeadConverted, Tail <: HList, TailConverted, TailConvertedHList <: HList](
+  implicit def forHList[Head, HeadConverted, Tail <: HList, TailConverted <: HList](
     implicit
     hConverter: Converter.Aux[Head, HeadConverted],
-    tConverter: Converter.Aux[Tail, TailConverted],
-    isHList: IsHList.Aux[TailConverted, TailConvertedHList]
-    ): Converter[Head :: Tail] = new Converter[Head :: Tail] {
-      type To = HeadConverted :: TailConvertedHList
+    tConverter: Converter.Aux[Tail, TailConverted]): Converter.Aux[Head :: Tail, HeadConverted :: TailConverted] =
+    new Converter[Head :: Tail] {
+      type To = HeadConverted :: TailConverted
       def to(values: Head :: Tail) = ???
     }
-}
-
-trait IsHList[L] {
-  type Out
-}
-object IsHList {
-  type Aux[L, Out0] = IsHList[L] { type Out = Out0 }
-  implicit def isHList[L <: HList] = new IsHList[L] { type Out = L }
 }
 
 object Usage extends App {
@@ -62,24 +38,7 @@ object Usage extends App {
   val hnilAux = the[Converter.Aux[HNil, HNil]]
 
   val hlist = the[Converter[Integer :: HNil]]
-  // implicitly[hlist.To =:= String] // fails, but why?
-  // val hlistAux = the[Converter.Aux[Integer :: HNil, String :: HNil]] // that's what I want to get, but doesn't find implicit
-
-  object explicitly {
-    // summoning all the implicits works
-    val hConverter = the[Converter.Aux[Integer, String]]
-    implicitly[hConverter.To =:= String]
-    val tConverter = the[Converter.Aux[HNil, HNil]]
-    implicitly[tConverter.To =:= HNil]
-    // val tailIsHList = the[tConverter.To <:< HList]
-    val tailIsHList = the[IsHList[tConverter.To]]
-
-
-    // but when passing them to the converter, the compiler doesn't infer the return type as expected...
-    // val wanted: Converter.Aux[Integer :: HNil, String :: HNil] = Converter.forHList(hConverter, tConverter, tailIsHList2)
-    // [error]  found   : Converter[Integer :: shapeless.HNil]
-    // [error]  required: Converter.Aux[Integer :: shapeless.HNil,String :: shapeless.HNil]
-    // [error]     (which expands to)  Converter[Integer :: shapeless.HNil]{type To = String :: shapeless.HNil}
-    // [error]     val wanted: Converter.Aux[Integer :: HNil, String :: HNil] = Converter.forHList(hConverter, tConverter, tailIsHList2)
-  }
+  type expected = String :: HNil
+  implicitly[hlist.To =:= expected]
+  val hlistAux = the[Converter.Aux[Integer :: HNil, String :: HNil]]
 }
